@@ -14,8 +14,6 @@
 把整个 `cyber_divination` 目录复制到 AstrBot 数据目录的 `data/plugins/` 下，然后在
 Dashboard 启用插件（或重启 AstrBot）。
 
-> 当前机器上即 `D:\dsastrbot\data\plugins\cyber_divination`。
-
 ## 使用
 
 默认唤醒前缀为 `/`：
