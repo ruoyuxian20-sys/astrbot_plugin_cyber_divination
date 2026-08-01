@@ -1,0 +1,23 @@
+{
+  "llm_enabled": {
+    "description": "是否启用 LLM 润色解读。开启后每次占卜会额外请求当前会话模型生成个性化解读；失败或冷却中会自动回退到内置解读，不影响使用。",
+    "type": "bool",
+    "default": false
+  },
+  "llm_cooldown_seconds": {
+    "description": "每个会话两次 LLM 调用之间的最小间隔（秒），防止频繁调用模型。",
+    "type": "int",
+    "default": 300,
+    "hint": "建议 >= 120"
+  },
+  "llm_timeout_seconds": {
+    "description": "单次 LLM 调用超时时间（秒），超时自动回退到内置解读。",
+    "type": "int",
+    "default": 30
+  },
+  "use_image": {
+    "description": "是否使用图文卡片输出。需要 AstrBot 文本转图（T2I）功能可用；渲染失败会自动回退到纯文本。",
+    "type": "bool",
+    "default": false
+  }
+}

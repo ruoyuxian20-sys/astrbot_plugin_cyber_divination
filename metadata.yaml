@@ -1,0 +1,14 @@
+name: cyber_divination
+display_name: 赛博占卜
+short_desc: 周易六爻、观音灵签、塔罗牌、奇门遁甲四套传统占卜，纯文本输出，可选 LLM 润色。
+desc: 赛博占卜插件：周易六爻、观音灵签、塔罗牌、奇门遁甲，纯文本输出，可选 LLM 润色与图文卡片。
+version: 1.0.0
+author: ruoyuxian20-sys
+repo: https://github.com/ruoyuxian20-sys/astrbot_plugin_cyber_divination
+astrbot_version: ">=4.9.2"
+tags:
+  - 占卜
+  - 六爻
+  - 塔罗
+  - 灵签
+  - 奇门遁甲
