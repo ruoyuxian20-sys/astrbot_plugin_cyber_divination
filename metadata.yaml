@@ -2,7 +2,7 @@ name: cyber_divination
 display_name: 赛博占卜
 short_desc: 周易六爻、观音灵签、塔罗牌、奇门遁甲与每日运势；支持塔罗查牌、占卜历史、奇门自动起局时间，可选 LLM 润色与图文卡片。
 desc: 赛博占卜插件：周易六爻（含六神）、观音灵签、塔罗牌（单张/三张牌阵与查牌）、奇门遁甲（简式时家排盘，不填时间自动检测当前时刻）、每日运势（按日期固定）。提供 /占卜 历史 查看记录，所有结果纯文本输出，可选 LLM 个性化润色与图文卡片，任何失败自动回退内置解读。
-version: 1.2.0
+version: 1.3.0
 author: ruoyuxian20-sys
 repo: https://github.com/ruoyuxian20-sys/astrbot_plugin_cyber_divination
 astrbot_version: ">=4.9.2"
