@@ -15,6 +15,12 @@
     "type": "int",
     "default": 30
   },
+  "history_max": {
+    "description": "每个会话保留的占卜历史记录条数上限，超出后丢弃最旧记录。",
+    "type": "int",
+    "default": 10,
+    "hint": "建议 1-50"
+  },
   "use_image": {
     "description": "是否使用图文卡片输出。需要 AstrBot 文本转图（T2I）功能可用；渲染失败会自动回退到纯文本。",
     "type": "bool",

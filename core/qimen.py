@@ -1,12 +1,11 @@
 """奇门遁甲（简式时家排盘）：以节气近似定月建与阴阳遁，未处理超接置闰；九星八门八神按九宫序顺逆飞布，神盘不入中五；日干支以 1949-10-01（甲子日）为基准推算。"""
-# 排盘输出长行为有意为之：
-# ruff: noqa: E501
+# 排盘输出长行为有意为之。
 from __future__ import annotations
 
-from datetime import date, datetime
+import re
+from datetime import datetime
 
-STEMS = "甲乙丙丁戊己庚辛壬癸"
-BRANCHES = "子丑寅卯辰巳午未申酉戌亥"
+from .ganzhi import BRANCHES, STEMS, day_ganzhi_index, stem_branch
 
 # 二十四节气（近似日期）：(月, 日, 名称, 月支序号, 阴阳遁)
 TERMS = [
@@ -91,15 +90,61 @@ GOD_MEANINGS = {
     "九天": "高远进取，利于远行谋大。",
 }
 
+_NOW_TOKENS = {"现在", "now", "此刻", "当前"}
+# 起局时间：2026-08-01 15:30 / 2026-8-1 / 2026年8月1日 15:30 等
+_TIME_RE = re.compile(
+    r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?(?:\s+\d{1,2}[:：]\d{2})?"
+)
 
-def _stem_branch(index: int) -> str:
-    return STEMS[index % 10] + BRANCHES[index % 12]
+
+def _normalize_time_str(time_str: str) -> str:
+    """归一化时间字符串：/→-、全角冒号→半角、中文年月日→分隔符、压缩空白。"""
+    clean = time_str.strip().replace("/", "-").replace("：", ":")
+    clean = re.sub(r"\s*年\s*", "-", clean)
+    clean = re.sub(r"\s*月\s*", "-", clean)
+    clean = re.sub(r"\s*日\s*", " ", clean)
+    return re.sub(r"\s+", " ", clean).strip()
 
 
-def _day_ganzhi_index(d: date) -> int:
-    """日干支序号：1949-10-01 为甲子（0）。"""
-    anchor = date(1949, 10, 1)
-    return (d - anchor).days % 60
+def parse_time(time_str: str) -> datetime | None:
+    """解析起局时间：YYYY-MM-DD [HH:MM]（支持中文日期与全角冒号）。
+
+    空串、「现在」等关键词或解析失败返回 None（调用方按当前时刻起局）。
+    """
+    if not time_str:
+        return None
+    clean = _normalize_time_str(time_str)
+    if clean.lower() in _NOW_TOKENS:
+        return None
+    try:
+        if len(clean.split()) == 1:
+            return datetime.strptime(clean, "%Y-%m-%d").replace(hour=12, minute=0)
+        return datetime.strptime(clean, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+
+
+def is_date_only(time_str: str) -> bool:
+    """判断时间串是否只含日期（无时刻部分）。"""
+    if not time_str:
+        return False
+    clean = _normalize_time_str(time_str)
+    return bool(clean) and len(clean.split()) == 1
+
+
+def split_time_question(text: str) -> tuple[str, str]:
+    """从文本中提取起局时间与所问之事；支持「现在」等关键词表示自动取当前时刻。"""
+    match = _TIME_RE.search(text)
+    if match:
+        time_str = match.group(0)
+        question = re.sub(
+            r"\s+", " ", f"{text[: match.start()]} {text[match.end():]}"
+        ).strip()
+        return time_str, question
+    tokens = text.split(maxsplit=1)
+    if tokens and tokens[0].strip("，,。.").lower() in _NOW_TOKENS:
+        return "", (tokens[1].strip() if len(tokens) > 1 else "")
+    return "", text
 
 
 def _current_term(dt: datetime) -> dict:
@@ -125,7 +170,7 @@ def get_four_pillars(dt: datetime) -> tuple[str, str, str, str, int]:
         year = (dt.year - 5) % 60
     else:
         year = (dt.year - 4) % 60
-    year_pillar = _stem_branch(year)
+    year_pillar = stem_branch(year)
 
     term = _current_term(dt)
     month_branch = term["month_branch"]
@@ -134,8 +179,8 @@ def get_four_pillars(dt: datetime) -> tuple[str, str, str, str, int]:
     month_stem = (wuhu_base[year % 5] + (month_branch - 2) % 12) % 10
     month_pillar = STEMS[month_stem] + BRANCHES[month_branch]
 
-    day_index = _day_ganzhi_index(dt.date())
-    day_pillar = _stem_branch(day_index)
+    day_index = day_ganzhi_index(dt.date())
+    day_pillar = stem_branch(day_index)
 
     hour_branch = ((dt.hour + 1) // 2) % 12
     # 五鼠遁：日干 -> 子时干
@@ -244,20 +289,19 @@ def _display_palace(pan: dict, palace: int) -> str:
     return f"{_PALACE_NAMES[palace]}宫{extra}：{star}/{door}门/{god}（{instrument}）"
 
 
-def build_result(time_str: str = "", question: str = "", sender: str = "") -> str:
-    """生成奇门遁甲排盘结果文本。time_str 形如 YYYY-MM-DD HH:MM 或 YYYY-MM-DD。"""
-    dt = datetime.now()
-    if time_str:
-        try:
-            clean = time_str.strip().replace("/", "-").replace("：", ":")
-            if len(clean.split()) == 1:
-                dt = datetime.strptime(clean, "%Y-%m-%d").replace(hour=12, minute=0)
-            else:
-                dt = datetime.strptime(clean, "%Y-%m-%d %H:%M")
-        except ValueError:
-            pass
+def _palace_display(palace: int) -> str:
+    """宫名显示：中五按「中五（寄坤二）」处理。"""
+    return "中五（寄坤二）" if palace == 5 else _PALACE_NAMES[palace]
 
-    pan = make_pan(dt)
+
+def summarize(pan: dict) -> str:
+    """一行摘要（占卜历史用）。"""
+    return f"{pan['phase']}{pan['ju']}局 · 值符{pan['zhifu_star']} · {pan['zhishi_door']}门"
+
+
+def format_pan(pan: dict, question: str = "", sender: str = "", note: str = "") -> str:
+    """把排盘结果排版为文本。note 为求测时刻的补充说明（自动检测/正午起局等）。"""
+    dt: datetime = pan["dt"]
     year_p, month_p, day_p, hour_p = pan["pillars"]
 
     parts = ["🔮 奇门遁甲 · 简式时家排盘"]
@@ -267,6 +311,8 @@ def build_result(time_str: str = "", question: str = "", sender: str = "") -> st
         parts.append(f"问卜人：{sender}")
     parts.append("")
     parts.append(f"求测时刻：{dt:%Y-%m-%d %H:%M}")
+    if note:
+        parts.append(note)
     parts.append(f"四柱：{year_p}年 {month_p}月 {day_p}日 {hour_p}时")
     parts.append(f"用局：{pan['phase']}{pan['ju']}局（{pan['yuan']}，{pan['term']}）")
     parts.append(f"值符：{pan['zhifu_star']}  值使：{pan['zhishi_door']}门")
@@ -276,13 +322,39 @@ def build_result(time_str: str = "", question: str = "", sender: str = "") -> st
         parts.append(_display_palace(pan, palace))
     parts.append("")
     parts.append("简断：")
-    parts.append(f"· 值符{pan['zhifu_star']}落{_PALACE_NAMES[pan['shi_gan_palace']]}：{STAR_MEANINGS[pan['zhifu_star']]}")
-    zhishi_display = pan["zhishi_palace"]
-    if zhishi_display == 5:
-        zhishi_display = 2
-    parts.append(f"· 值使{pan['zhishi_door']}门落{_PALACE_NAMES[zhishi_display]}：{DOOR_MEANINGS[pan['zhishi_door']]}")
-    zhifu_god = pan["shen_pan"].get(pan["shi_gan_palace"], "九天")
+    zhifu_palace = pan["shi_gan_palace"]
+    parts.append(
+        f"· 值符{pan['zhifu_star']}落{_palace_display(zhifu_palace)}："
+        f"{STAR_MEANINGS[pan['zhifu_star']]}"
+    )
+    zhishi_display = 2 if pan["zhishi_palace"] == 5 else pan["zhishi_palace"]
+    parts.append(
+        f"· 值使{pan['zhishi_door']}门落{_PALACE_NAMES[zhishi_display]}："
+        f"{DOOR_MEANINGS[pan['zhishi_door']]}"
+    )
+    god_palace = 2 if zhifu_palace == 5 else zhifu_palace
+    zhifu_god = pan["shen_pan"].get(god_palace, "九天")
     parts.append(f"· 值符宫临{zhifu_god}神：{GOD_MEANINGS[zhifu_god]}")
     parts.append("")
     parts.append("※ 简式排盘未含超接置闰等细则，结果仅供娱乐参考。")
     return "\n".join(parts)
+
+
+def build_result(time_str: str = "", question: str = "", sender: str = "") -> str:
+    """生成奇门遁甲排盘结果文本（兼容包装）。
+
+    time_str 形如 YYYY-MM-DD [HH:MM]（支持中文日期）；空串或解析失败按当前时刻起局，
+    并附带相应提示。
+    """
+    provided = bool(time_str.strip())
+    parsed = parse_time(time_str)
+    dt = parsed or datetime.now()
+    if parsed is None and provided:
+        note = "⚠ 时间格式无法识别，已按当前时刻起局。"
+    elif not provided:
+        note = "（自动检测当前时刻起局）"
+    elif is_date_only(time_str):
+        note = "（仅提供日期，按当日正午起局）"
+    else:
+        note = ""
+    return format_pan(make_pan(dt), question, sender, note=note)

@@ -1,6 +1,5 @@
-"""塔罗牌：大阿卡纳 22 张 + 小阿卡纳 56 张，正位/逆位释义。"""
-# 牌义长行为有意为之：
-# ruff: noqa: E501
+"""塔罗牌：大阿卡纳 22 张 + 小阿卡纳 56 张，正位/逆位释义，无放回抽牌与查牌。"""
+# 牌义长行为有意为之。
 from __future__ import annotations
 
 import random
@@ -102,6 +101,10 @@ MINOR_ARCANA: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
+# 牌阵关键词
+_THREE_TOKENS = {"三张", "三张牌", "3", "3张", "three"}
+_SINGLE_TOKENS = {"单张", "一张", "1", "single"}
+
 
 def _all_cards() -> list[tuple[str, str, str]]:
     cards = [("大阿卡纳 " + name, upright, reversed_) for name, upright, reversed_ in MAJOR_ARCANA]
@@ -114,6 +117,35 @@ def _all_cards() -> list[tuple[str, str, str]]:
 ALL_CARDS = _all_cards()
 
 
+def parse_spread(text: str) -> tuple[str, str]:
+    """识别牌阵关键词：返回 (spread, 剩余问题)。spread: single / three。"""
+    parts = text.split(maxsplit=1)
+    if parts:
+        token = parts[0].lower()
+        if token in _THREE_TOKENS:
+            return "three", (parts[1].strip() if len(parts) > 1 else "")
+        if token in _SINGLE_TOKENS:
+            return "single", (parts[1].strip() if len(parts) > 1 else "")
+    return "single", text
+
+
+def search_cards(keyword: str) -> list[tuple[str, str, str]]:
+    """按牌名关键词查牌（大小写不敏感、包含匹配）。返回 (牌名, 正位, 逆位)。"""
+    kw = keyword.strip().lower()
+    if not kw:
+        return []
+    return [
+        (name, upright, reversed_)
+        for name, upright, reversed_ in ALL_CARDS
+        if kw in name.lower()
+    ]
+
+
+def card_summary(name: str, is_reversed: bool) -> str:
+    """一行牌面摘要（占卜历史用）。"""
+    return f"{name}（{'逆位' if is_reversed else '正位'}）"
+
+
 def draw_single(rng: random.Random | None = None) -> tuple[str, bool, str]:
     """抽一张牌：返回 (牌名, 是否逆位, 释义)。"""
     rng = rng or random.SystemRandom()
@@ -123,41 +155,68 @@ def draw_single(rng: random.Random | None = None) -> tuple[str, bool, str]:
 
 
 def draw_three(rng: random.Random | None = None) -> list[tuple[str, str, bool, str]]:
-    """三张牌阵（过去/现在/未来）：[(位置, 牌名, 是否逆位, 释义)]。"""
+    """三张牌阵（过去/现在/未来，无放回）：[(位置, 牌名, 是否逆位, 释义)]。"""
     rng = rng or random.SystemRandom()
     positions = ["过去", "现在", "未来"]
+    picked = rng.sample(ALL_CARDS, 3)
     result = []
-    for pos in positions:
-        name, is_reversed, meaning = draw_single(rng)
+    for pos, (name, upright, reversed_) in zip(positions, picked, strict=True):
+        is_reversed = rng.random() < 0.5
+        meaning = reversed_ if is_reversed else upright
         result.append((pos, name, is_reversed, meaning))
     return result
 
 
-def build_result(spread: str = "single", question: str = "", sender: str = "") -> str:
-    """生成塔罗占卜结果文本。spread: single / three。"""
+def _header(question: str, sender: str) -> list[str]:
     parts = ["🔮 塔罗牌占卜"]
     if question:
         parts.append(f"所问之事：{question}")
     if sender:
         parts.append(f"问卜人：{sender}")
     parts.append("")
+    return parts
 
-    if spread == "three":
-        parts.append("牌阵：过去 · 现在 · 未来")
-        parts.append("")
-        for pos, name, is_reversed, meaning in draw_three():
-            state = "逆位" if is_reversed else "正位"
-            parts.append(f"【{pos}】{name}（{state}）")
-            parts.append(f"  → {meaning}")
-            parts.append("")
-    else:
-        parts.append("牌阵：单张指引")
-        parts.append("")
-        name, is_reversed, meaning = draw_single()
-        state = "逆位" if is_reversed else "正位"
-        parts.append(f"【今日指引】{name}（{state}）")
-        parts.append(f"  → {meaning}")
-        parts.append("")
 
+def format_single(
+    name: str,
+    is_reversed: bool,
+    meaning: str,
+    question: str = "",
+    sender: str = "",
+) -> str:
+    """把单张抽牌结果排版为文本。"""
+    parts = _header(question, sender)
+    state = "逆位" if is_reversed else "正位"
+    parts.append("牌阵：单张指引")
+    parts.append("")
+    parts.append(f"【今日指引】{name}（{state}）")
+    parts.append(f"  → {meaning}")
+    parts.append("")
     parts.append("※ 塔罗占卜仅供参考娱乐，请理性看待。")
     return "\n".join(parts)
+
+
+def format_three(
+    cards: list[tuple[str, str, bool, str]],
+    question: str = "",
+    sender: str = "",
+) -> str:
+    """把三张牌阵结果排版为文本。"""
+    parts = _header(question, sender)
+    parts.append("牌阵：过去 · 现在 · 未来")
+    parts.append("")
+    for pos, name, is_reversed, meaning in cards:
+        state = "逆位" if is_reversed else "正位"
+        parts.append(f"【{pos}】{name}（{state}）")
+        parts.append(f"  → {meaning}")
+        parts.append("")
+    parts.append("※ 塔罗占卜仅供参考娱乐，请理性看待。")
+    return "\n".join(parts)
+
+
+def build_result(spread: str = "single", question: str = "", sender: str = "") -> str:
+    """生成塔罗占卜结果文本（兼容包装）。spread: single / three。"""
+    if spread == "three":
+        return format_three(draw_three(), question, sender)
+    name, is_reversed, meaning = draw_single()
+    return format_single(name, is_reversed, meaning, question, sender)

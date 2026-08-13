@@ -1,7 +1,13 @@
 """图文卡片渲染（可选功能，渲染失败时主插件会回退到纯文本）。"""
-# CSS 长行为有意为之：
-# ruff: noqa: E501
+# CSS 长行为有意为之。
 from __future__ import annotations
+
+import html as _html
+
+
+def _esc(value: str) -> str:
+    """HTML 转义，防止用户问题文本破坏卡片或注入标记。"""
+    return _html.escape(value or "", quote=True)
 
 
 def build_card_html(
@@ -12,7 +18,7 @@ def build_card_html(
 ) -> str:
     """把占卜结果渲染成一张暗色神秘风格的卡片 HTML。"""
     body_html = "\n".join(
-        f"<div class=\"line {'sep' if not line.strip() else ''}\">{line}</div>"
+        f"<div class=\"line {'sep' if not line.strip() else ''}\">{_esc(line)}</div>"
         for line in body_lines
     )
     return f"""<!DOCTYPE html>
@@ -51,10 +57,10 @@ def build_card_html(
 </head>
 <body>
 <div class="card">
-  <div class="title">{title}</div>
-  <div class="subtitle">{subtitle}</div>
+  <div class="title">{_esc(title)}</div>
+  <div class="subtitle">{_esc(subtitle)}</div>
   {body_html}
-  <div class="footer">{footer}</div>
+  <div class="footer">{_esc(footer)}</div>
 </div>
 </body>
 </html>"""

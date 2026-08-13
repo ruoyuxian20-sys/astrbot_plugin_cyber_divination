@@ -1,6 +1,5 @@
 """观音灵签（通行整理版，共一百签）。"""
-# 签诗长行为有意为之：
-# ruff: noqa: E501
+# 签诗长行为有意为之。
 from __future__ import annotations
 
 import random
@@ -118,9 +117,15 @@ def draw(rng: random.Random | None = None) -> tuple[int, str, str, str]:
     return index + 1, grade, poem, explain
 
 
-def build_result(question: str = "", sender: str = "") -> str:
-    """生成求签结果文本。"""
-    number, grade, poem, explain = draw()
+def format_draw(
+    number: int,
+    grade: str,
+    poem: str,
+    explain: str,
+    question: str = "",
+    sender: str = "",
+) -> str:
+    """把抽签结果排版为文本。"""
     parts = ["🔮 观音灵签 · 求签"]
     if question:
         parts.append(f"所问之事：{question}")
@@ -135,3 +140,8 @@ def build_result(question: str = "", sender: str = "") -> str:
     parts.append("")
     parts.append("※ 灵签解读仅供参考娱乐，请理性看待。")
     return "\n".join(parts)
+
+
+def build_result(question: str = "", sender: str = "") -> str:
+    """生成求签结果文本（兼容包装）。"""
+    return format_draw(*draw(), question, sender)

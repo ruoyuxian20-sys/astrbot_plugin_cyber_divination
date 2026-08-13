@@ -1,10 +1,13 @@
-"""周易六爻：三枚铜钱起卦，六十四卦卦辞与简解。"""
-# 数据表中文长行为有意为之：
-# ruff: noqa: E501
+"""周易六爻：三枚铜钱起卦，六十四卦卦辞与简解，按日干布六神。"""
+# 数据表中文长行为有意为之。
 from __future__ import annotations
 
 import random
 from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import date
+
+from .ganzhi import day_ganzhi_index
 
 # 八卦符号
 TRIGRAM_SYMBOLS = {
@@ -100,12 +103,24 @@ HEXAGRAMS: dict[int, tuple[str, str, str]] = {
 
 _YI_JING_SYMBOLS = "䷀䷁䷂䷃䷄䷅䷆䷇䷈䷉䷊䷋䷌䷍䷎䷏䷐䷑䷒䷓䷔䷕䷖䷗䷘䷙䷚䷛䷜䷝䷞䷟䷠䷡䷢䷣䷤䷥䷦䷧䷨䷩䷪䷫䷬䷭䷮䷯䷰䷱䷲䷳䷴䷵䷶䷷䷸䷹䷺䷻䷼䷽䷾䷿"
 
+_YAO_NAMES = {6: "老阴", 7: "少阳", 8: "少阴", 9: "老阳"}
+
+# 六神按日干起初爻：甲乙起青龙、丙丁起朱雀、戊起勾陈、己起螣蛇、庚辛起白虎、壬癸起玄武
+SIX_GODS = ["青龙", "朱雀", "勾陈", "螣蛇", "白虎", "玄武"]
+_SIX_GOD_START = [0, 0, 1, 1, 2, 3, 4, 4, 5, 5]
+
 
 def hexagram_symbol(number: int) -> str:
     """六十四卦 Unicode 符号。"""
     if 1 <= number <= 64:
         return _YI_JING_SYMBOLS[number - 1]
     return ""
+
+
+def six_gods(day_index: int) -> list[str]:
+    """六神（按日干定初爻，自下而上顺排六爻）。"""
+    start = _SIX_GOD_START[day_index % 10]
+    return [SIX_GODS[(start + i) % 6] for i in range(6)]
 
 
 def toss_three_coins(rng: random.Random) -> int:
@@ -140,9 +155,6 @@ def changed_hexagram(lines: list[int]) -> tuple[int, list[int]]:
     return number, new_lines
 
 
-_YAO_NAMES = {6: "老阴", 7: "少阳", 8: "少阴", 9: "老阳"}
-
-
 def _yao_line(value: int) -> str:
     if value in (7, 9):
         base = "━━━━━"
@@ -152,39 +164,104 @@ def _yao_line(value: int) -> str:
     return f"{base}{mark}"
 
 
-def build_result(question: str = "", sender: str = "") -> str:
-    """生成六爻占卜结果文本。"""
-    lines = toss_hexagram()
+@dataclass
+class ZhouyiCast:
+    """一次六爻起卦的结构化结果。"""
+
+    lines: list[int]
+    number: int
+    upper: str
+    lower: str
+    name: str
+    guaci: str
+    jie: str
+    moving: list[int]
+    changed_number: int | None
+    changed_name: str | None
+    changed_guaci: str | None
+    changed_jie: str | None
+    gods: list[str]
+
+
+def cast(
+    rng: random.Random | None = None,
+    day_index: int | None = None,
+) -> ZhouyiCast:
+    """起卦并解析为结构化结果。day_index 为当日干支序号（六神用）。"""
+    rng = rng or random.SystemRandom()
+    if day_index is None:
+        day_index = day_ganzhi_index(date.today())
+    lines = toss_hexagram(rng)
     number, upper, lower = resolve_hexagram(lines)
     name, guaci, jie = HEXAGRAMS[number]
     moving = [i + 1 for i, v in enumerate(lines) if v in (6, 9)]
+    changed_number: int | None = None
+    changed_name: str | None = None
+    changed_guaci: str | None = None
+    changed_jie: str | None = None
+    if moving:
+        changed_number, _ = changed_hexagram(lines)
+        changed_name, changed_guaci, changed_jie = HEXAGRAMS[changed_number]
+    return ZhouyiCast(
+        lines=lines,
+        number=number,
+        upper=upper,
+        lower=lower,
+        name=name,
+        guaci=guaci,
+        jie=jie,
+        moving=moving,
+        changed_number=changed_number,
+        changed_name=changed_name,
+        changed_guaci=changed_guaci,
+        changed_jie=changed_jie,
+        gods=six_gods(day_index),
+    )
 
+
+def summarize(cast: ZhouyiCast) -> str:
+    """一行摘要（占卜历史用）。"""
+    parts = [f"{hexagram_symbol(cast.number)}{cast.name}卦"]
+    if cast.changed_number is not None:
+        parts.append(f"变{cast.changed_name}卦")
+    return " ".join(parts)
+
+
+def format_cast(cast: ZhouyiCast, question: str = "", sender: str = "") -> str:
+    """把结构化起卦结果排版为文本。"""
     parts = ["🔮 周易六爻 · 铜钱起卦"]
     if question:
         parts.append(f"所问之事：{question}")
     if sender:
         parts.append(f"求卦人：{sender}")
     parts.append("")
-    parts.append(f"本卦：{hexagram_symbol(number)} {name}卦（{upper}{TRIGRAM_SYMBOLS[upper]}上，{lower}{TRIGRAM_SYMBOLS[lower]}下）")
-    parts.append(f"卦辞：{guaci}")
-    parts.append(f"简解：{jie}")
+    parts.append(
+        f"本卦：{hexagram_symbol(cast.number)} {cast.name}卦"
+        f"（{cast.upper}{TRIGRAM_SYMBOLS[cast.upper]}上，"
+        f"{cast.lower}{TRIGRAM_SYMBOLS[cast.lower]}下）"
+    )
+    parts.append(f"卦辞：{cast.guaci}")
+    parts.append(f"简解：{cast.jie}")
     parts.append("")
     parts.append("爻象（自下而上）：")
-    for i, v in enumerate(lines, start=1):
-        parts.append(f"第{i}爻 {_YAO_NAMES[v]} {_yao_line(v)}")
+    for i, v in enumerate(cast.lines, start=1):
+        parts.append(f"第{i}爻 {cast.gods[i - 1]} {_YAO_NAMES[v]} {_yao_line(v)}")
 
-    if moving:
-        dyn = "、".join(str(i) for i in moving)
-        changed_number, _ = changed_hexagram(lines)
-        cname, cguaci, cjie = HEXAGRAMS[changed_number]
+    if cast.moving and cast.changed_number is not None:
+        dyn = "、".join(str(i) for i in cast.moving)
         parts.append("")
         parts.append(f"动爻：第{dyn}爻（物极必反，事有变化之机）")
-        parts.append(f"变卦：{hexagram_symbol(changed_number)} {cname}卦")
-        parts.append(f"变卦卦辞：{cguaci}")
-        parts.append(f"变卦简解：{cjie}")
+        parts.append(f"变卦：{hexagram_symbol(cast.changed_number)} {cast.changed_name}卦")
+        parts.append(f"变卦卦辞：{cast.changed_guaci}")
+        parts.append(f"变卦简解：{cast.changed_jie}")
     else:
         parts.append("")
         parts.append("六爻安静，暂无动象，宜守其常，静观其变。")
     parts.append("")
     parts.append("※ 周易占断仅供参考，重大决策请理性判断。")
     return "\n".join(parts)
+
+
+def build_result(question: str = "", sender: str = "") -> str:
+    """生成六爻占卜结果文本（兼容包装，默认取当天日干支）。"""
+    return format_cast(cast(), question, sender)
